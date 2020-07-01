@@ -1,6 +1,7 @@
 const url = require('url');
 const http = require('http');
 const path = require('path');
+const fs = require("fs-extra");
 
 const server = new http.Server();
 
@@ -11,7 +12,17 @@ server.on('request', (req, res) => {
 
   switch (req.method) {
     case 'DELETE':
-
+      if (pathname.includes('/')) {
+        res.statusCode = 400;
+        res.end('Вложенные папки не поддерживаются');
+      } else if (!fs.existsSync(filepath)) {
+        res.statusCode = 404;
+        res.end("Файла на диске нет");
+      } else {
+        fs.unlinkSync(filepath);
+        res.statusCode = 200;
+        res.end("Файл удалён");
+      }
       break;
 
     default:
