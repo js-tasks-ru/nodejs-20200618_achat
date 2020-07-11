@@ -30,8 +30,14 @@ app.use(async (ctx, next) => {
 });
 
 app.use((ctx, next) => {
-  ctx.login = async function(user) {
+  ctx.login = async function (user) {
     const token = uuid();
+
+    await Session.create({
+      token: token,
+      lastVisit: Date.now(),
+      user: user._id
+    });
 
     return token;
   };
@@ -45,6 +51,26 @@ router.use(async (ctx, next) => {
   const header = ctx.request.get('Authorization');
   if (!header) return next();
 
+  let arr = header.split(' ');
+  if (arr.length < 2) return next();
+
+  let token = arr[1];
+  if (!token) return next();
+
+  let session = await Session.findOne({token: token});
+
+  if (!session) {
+    let err = new Error('Неверный аутентификационный токен');
+    err.status = 401;
+    throw err;
+  }
+  await session.execPopulate('user');
+
+  session.lastVisit = Date.now();
+  await session.save();
+
+  ctx.user = session.user;
+
   return next();
 });
 
@@ -53,7 +79,7 @@ router.post('/login', login);
 router.get('/oauth/:provider', oauth);
 router.post('/oauth_callback', handleMongooseValidationError, oauthCallback);
 
-router.get('/me', me);
+router.get('/me', mustBeAuthenticated, me);
 
 app.use(router.routes());
 
@@ -63,7 +89,7 @@ const fs = require('fs');
 const index = fs.readFileSync(path.join(__dirname, 'public/index.html'));
 app.use(async (ctx) => {
   if (ctx.url.startsWith('/api') || ctx.method !== 'GET') return;
-  
+
   ctx.set('content-type', 'text/html');
   ctx.body = index;
 });
